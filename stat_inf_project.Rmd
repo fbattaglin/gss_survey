@@ -1,0 +1,252 @@
+---
+title: "Statistical inference with the GSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: sandstone
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+For more than four decades, the General Social Survey (GSS) has studied the growing complexity of American society. It is the only full-probability, personal-interview survey designed to monitor changes in both social characteristics and attitudes currently being conducted in the United States. 
+
+### Metodology
+The target population of the GSS is adults (18+) living in households in the United States. The GSS sample is drawn using an area probability design that randomly selects respondents in households across the United States to take part in the survey. Based on the nature and methodology of the survey, all relationships indicated may indication **association, but not causation**.
+
+### Sampling
+The GSS performs **random sampling**, so it tries to make a broad generalization of the US population. Respondents that become part of the GSS sample are from a mix of urban, suburban, and rural geographic areas. Participation in the study is voluntary.
+
+The GSS is a **observational study**. It draws inferences from a sample to a population where the independent variable is not under the control of the researcher because of ethical concerns or logistical constraints.
+
+### Possible Sources of Bias
+- It was not until 2006 that Spanish-speaking adults were included in the survey.
+- Interviews may genarate **Social desirability bias**. It is a type of response bias that influences a participant to deny undesirable traits, and ascribe to themselves traits that are socially desirable.
+- **Demand characteristics** refer to a type of response bias where participants alter their response or behavior simply because they are part of an experiment.
+
+
+* * *
+
+## Part 2: Research question
+For many years, the scientific community has been wondering — and often worrying — about the extent to which the public trusts science. Some observers have warned of a “war on science,” and recently some have expressed concern about the rise of populist antagonism to the influence of experts.  Apparently there is a feud between religious science-deniers and the scientific community. Some would say that science and religion are incompatible, and you must choose between them.
+
+>Is there a association between religion and the level of confidence in the scientific community?
+
+In order to address this question we will focus on the following variables:
+
++ **YEAR:** GSS YEAR FOR THIS RESPONDENT  
+  Data type: numeric Record/columns: 1/7-10
+
++ **CONSCI:** CONFIDENCE IN SCIENTIFIC COMMUNITY.  
+  As far as the people running these institutions are concerned, would you say you have a great deal of confidence in Scientific community
+
++ **RELIG:**  RELIGIOUS PREFERENCE.  
+  What is your religous preference? Is it Protestant, Catholic, Jewish, some other religion, or no religion?
+
++ **ATTEND:** HOW OFTEN R ATTENDS RELIGIOUS SERVICES.  
+  How often do you attend religious services?
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+First we need to subset some variables, that will make the data a lot easier to visualize and to work with. Than we will genarate a summary in order to have an overall view of the distribution between the variables.
+
+
+```{r}
+project <- gss %>%
+  select(year, consci, relig, attend) %>%
+  na.omit()
+
+#Does not include year that should not be treated as a numeric variable
+summary(project[, 2:4])
+```
+
+Than we can check if there is some relationship between how often respondents attend to the religious services and their confidence in the scientific community. We will start drawing a contingency table using the variables CONSCI (confidence in Scientific community) and ATTEND (how often people attend religious services).
+
+```{r}
+table(project$consci, project$attend)
+```
+
+We can also check the same table using proportions:
+
+```{r}
+prop.table(table(project$consci, project$attend))
+```
+
+As we can see, proportions of people who have "Hardly Any" confidence in the scientific community keep getting small as the frequency they attend to service increases.
+
+Next we will generate a bar plot, based on a 0 to 1 scale, to visualize if the opinion about science varies as the respondents attend more services.
+
+```{r}
+ggplot(project) + aes(x=attend,fill=consci) + geom_bar(position = "fill") +     labs(x="Frequency attend service",y="Proportion",title="Frequency Attend Service vs Confidence in Scientific community")  + coord_flip() + scale_fill_manual(values=c("#999999", "#E69F00", "#56B4E9"), name="Opinion",labels=c("Great Deal","Only Some", "Hardly Any"))
+```
+
+**Observations:** 
+
+*  The confidence in science stay pretty much the same as for people who attend to service at least once a month or less.  
+*  However as the frequency of attending to service increases (more than once a month), there is noticible decrease on their confidence in science.  
+*  People who attend to service more than once a week have the highest numbers on "Hardly any believe in Science" and the lowest percentages of pelople who "believe a Great Deal in science ".  
+
+
+
+Before we start drawing any conclusions we have to check if somehow confidence in science have changed over the years. For this reason we will create plot that shows changes in the proportions of the people who have the highest and lowest confidence in science.
+
+
+```{r}
+#Mutate column Year from Numeric to Factor
+project <- project %>%
+  mutate(Year = as.factor(year))
+
+#People who believe in science 
+science <- project%>% group_by(year, consci)%>%filter(consci=="A Great Deal")%>%  summarise(sci=n())
+
+#People who hardly believe in science 
+religious <- project%>% group_by(year, consci)%>%filter(consci=="Hardly Any")%>%  summarise(n_sci=n())
+
+#Create new dataframe grouped by year
+time <- project%>% group_by(year)%>%summarise(count=n())
+time <- merge(time, science, by='year')
+time <- merge(time, religious, by='year')
+time$consci.x <- NULL
+time$consci.y <- NULL
+time <- time %>%
+  mutate(p_sci= sci/ count, p_reg= n_sci/ count)
+
+#plotting
+ggplot(time, aes(x=year, y=p_sci, color="high_confidence")) + geom_line() + geom_line( aes(y=p_reg, color = "low_confidence")) + scale_colour_manual(name="Confidence in Science", values=c(high_confidence="#E69F00", low_confidence="#56B4E9"))+ labs(x="Year",y="Percentage of Respondents",title="Confidence in Science over the Years")
+```
+
+**Observation**  
+As we can see in the plot **confidence in science** have not changed much in the last few decades. Therefore we can generalize the numbers through out the rest of the study without isolating any specific dates.
+
+
+
+
+
+* * *
+
+## Part 4: Inference
+
+###HYPOTESIS 1
+
+Since the dataset consists of two categorical variables (religion and confidence in the scientific community), the adequate test to be used is the chi-square test of independence. This test is to be used when comparing 2 categorical variables where one of the variables has more than 2 levels. The chi-square test does not create confidence intervals, so these were not included in this analysis.
+
+
+>The null hypothesis (H0) is that the respondent’s confidence in scientific community and religion are independent variables.
+
+>The alternative hypothesis (HA) is that confidence in the scientific community does vary by religion.
+
+
+###Conditions:
+The key conditions for the chi square test of independence are:  
+
+* Independence between observations. This is assumed to be true based on the sampling methodology used in the GSS, as it uses random sampling. Furthermore, the size of the sample is less than 10% of the population, and each result is only counted in one cell.
+
+*  Sample size. As can be seen below, there are at least 5 counts for each cell.  
+
+```{r}
+xtab <- xtabs(~relig + consci, data = project)
+xtab
+```
+We can also test for independence of all factors in this table, using the function **summary** in a contingency table:
+
+```{r}
+summary(xtab[1:3,])
+```
+
+
+However some religions have a small count, we will focus on the top 3 religions: Protestant, Catholic, and Jewish. Therefore we will have to subset the data.
+
+
+```{r}
+#most popular relegions
+pop_reg <- c("Protestant", "Catholic", "Jewish")
+
+
+new_proj <- project %>% 
+  filter(project["relig"] == pop_reg)
+
+```
+
+Finally, we are able to perform the inference calculation using the chi-square test of independence. We will use the filtered dataframe containing only data from the 3 most popular religions and we response "A Great Deal" as the sucess (which indicates maximum confidence in the scientifical community).  
+
+```{r}
+inference(y = consci, x= relig, data = new_proj ,type = "ht", statistic = "proportion", method = "theoretical", success = "A Great Deal", alternative = "greater")
+```
+
+###Conclusion
+
+The high Chi-squared statistic with 4 degrees of freedom leads to very low p-values (close to zero). Since the p-values are below alpha (0.05), we can conclude that there is sufficient evidence to reject H0 (null hypothesis).
+
+In the context of the research question, it mean that there is evidence that the confidence in scientific community varies based on the religion.
+
+Ultimately, though, this result cannot be used to determine causality. This occurs because the GSS is an observational study, and not an experiment with randomized assignment to treatment.
+
+
+
+###HYPOTESIS 2
+
+In order to support the claim that religious people really have less confidence in science, we need to check if non-religious people (atheists) do not act have the same characteristics. Therefore we to conduct a hypothesis test to determine whether the difference between two proportions is significant.
+
+>The null hypothesis (H0) P1 = P2: the proportion of population who hardly believe in the scientific community is the same as the proportion of atheist population who hardly believe in the scientific community
+
+>The alternative hypothesis (HA) P1 ≠ P2: the proportion of population who hardly believe in the scientific community is different of the proportion of  atheist population who hardly believe in the scientific community
+
+
+###Conditions:
+
+* Independence between observations. This is assumed to be true based on the sampling methodology used in the GSS, as it uses random sampling. Furthermore, the size of the sample is less than 10% of the population, and each result is only counted in one cell.
+
+* Sample size.Each population is at least 20 times as big as its sample.
+
+* Each sample includes at least 10 successes and 10 failures, as we can see below:
+
+```{r}
+#people with no religion (atheist) 
+project$atheist <- project$relig == "None"
+
+#people that hardly believe on the scientific community
+project$no_sci <- project$consci == "Hardly Any"
+
+summary(project[, 6:7])
+```
+
+For this analysis, the significance level is 0.05. The test method is a two-proportion z-test.
+
+
+
+```{r}
+inference(y = atheist, x = no_sci , data =project, statistic = "proportion", type = "ci", conf_level = 0.95, alternative = 'twosided', method = "theoretical", success = TRUE)
+```
+
+###Conclusion
+
+If a confidence interval does not contain the null value, the null hypothesis should be rejected in favor of the alternative hypothesis (HA).
+
+In essence, I am 95% confident that the proportion of the population that hardly belive in science is 0.0062 to 0.0218 different than the proportion of Atheists.
+
+Since the P-value (0.0308) is less than the significance level (0.05), we **reject** the null hypothesis.
+
+
